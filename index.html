@@ -619,15 +619,26 @@ document.getElementById("form").onsubmit=async e=>{
  const payload={...obj,history,user_id:currentUser.id};
  let result;
  if(i>=0){
-   // Mise à jour explicite : on n'utilise pas .select() ici, pour éviter qu'une
-   // réponse de type RETURNING/RLS masque une mise à jour pourtant effectuée.
-   result=await supabaseClient.from("prospects").update(payload).eq("id",prospectId).eq("user_id",currentUser.id);
+   // On utilise upsert + select pour vérifier que Supabase a réellement
+   // enregistré la nouvelle valeur du statut (et pas seulement accepté la requête).
+   result=await supabaseClient.from("prospects")
+     .upsert(payload,{onConflict:"id"})
+     .select("id,status")
+     .maybeSingle();
  }else{
-   result=await supabaseClient.from("prospects").insert(payload);
+   result=await supabaseClient.from("prospects")
+     .insert(payload)
+     .select("id,status")
+     .single();
  }
  if(result.error){
    console.error("Supabase save error:",result.error);
    toast("Impossible d’enregistrer : "+(result.error.message||"erreur Supabase"));
+   return;
+ }
+ if(i>=0 && (!result.data || result.data.status !== obj.status)){
+   console.error("Supabase status mismatch:", {sent: obj.status, returned: result.data});
+   toast("Le statut n’a pas été enregistré dans Supabase");
    return;
  }
  obj.history=history;
