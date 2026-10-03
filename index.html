@@ -600,25 +600,41 @@ document.getElementById("closeModal").onclick=closeModal;document.getElementById
 document.getElementById("modalBack").addEventListener("click",e=>{if(e.target.id==="modalBack")closeModal()});
 document.getElementById("form").onsubmit=async e=>{
  e.preventDefault();
- const id=document.getElementById("id").value||crypto.randomUUID();
- const obj={id,client:client.value.trim(),activity:activity.value.trim(),email:email.value.trim(),status:status.value,first:first.value||null,last:last.value||null,next:next.value||null,note:note.value.trim()};
- const i=data.findIndex(x=>x.id===id);
+ if(!currentUser){toast("Session Supabase introuvable");return;}
+ const el=id=>document.getElementById(id);
+ const prospectId=el("id").value||crypto.randomUUID();
+ const obj={
+   id:prospectId,
+   client:el("client").value.trim(),
+   activity:el("activity").value.trim(),
+   email:el("email").value.trim(),
+   status:el("status").value,
+   first:el("first").value||null,
+   last:el("last").value||null,
+   next:el("next").value||null,
+   note:el("note").value.trim()
+ };
+ const i=data.findIndex(x=>x.id===prospectId);
  const history=i>=0 && Array.isArray(data[i].history)?data[i].history:[];
  const payload={...obj,history,user_id:currentUser.id};
  let result;
  if(i>=0){
-   result=await supabaseClient.from("prospects").update(payload).eq("id",id).eq("user_id",currentUser.id).select("id").single();
+   // Mise à jour explicite : on n'utilise pas .select() ici, pour éviter qu'une
+   // réponse de type RETURNING/RLS masque une mise à jour pourtant effectuée.
+   result=await supabaseClient.from("prospects").update(payload).eq("id",prospectId).eq("user_id",currentUser.id);
  }else{
-   result=await supabaseClient.from("prospects").insert(payload).select("id").single();
+   result=await supabaseClient.from("prospects").insert(payload);
  }
  if(result.error){
-   console.error(result.error);
+   console.error("Supabase save error:",result.error);
    toast("Impossible d’enregistrer : "+(result.error.message||"erreur Supabase"));
    return;
  }
  obj.history=history;
  if(i>=0)data[i]=obj;else data.unshift(obj);
- render();closeModal();toast(i>=0?"Prospect mis à jour":"Prospect ajouté");
+ render();
+ closeModal();
+ toast(i>=0?"Prospect mis à jour":"Prospect ajouté");
 };
 document.getElementById("deleteBtn").onclick=async()=>{
  if(!editingId)return;
